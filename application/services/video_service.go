@@ -11,6 +11,7 @@ import (
 	"os/exec"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials" // Importação adicionada
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 )
@@ -35,7 +36,6 @@ func NewVideoService() VideoService {
 
 	return VideoService{s3Client: s3Client}
 }
-
 
 func (v *VideoService) Download(bucketName string) error {
 	// Configura o contexto
@@ -78,6 +78,7 @@ func (v *VideoService) Download(bucketName string) error {
 }
 
 func (v *VideoService) Fragment() error {
+
 	err := os.Mkdir(os.Getenv("localStoragePath")+"/"+v.Video.ID, os.ModePerm)
 	if err != nil {
 		return err
@@ -98,30 +99,38 @@ func (v *VideoService) Fragment() error {
 }
 
 func (v *VideoService) Encode() error {
-    inputPath := os.Getenv("localStoragePath") + "/" + v.Video.ID + ".mp4"
-    outputPath := os.Getenv("localStoragePath") + "/" + v.Video.ID + ".frag.mp4"
+    // Define os caminhos de entrada e saída
+    inputPath := os.Getenv("localStoragePath") + "/" + v.Video.ID + ".frag"
+    outputPath := os.Getenv("localStoragePath") + "/" + v.Video.ID + ".mp4"
 
+    // Define os argumentos para o script Python
     cmdArgs := []string{
-        inputPath,
-        outputPath,
+        "/opt/Bento4/Source/Python/utils/mp4-dash.py", // Caminho para o script
+        inputPath, // Caminho do arquivo .frag
+        "--output", // Flag para o caminho de saída
+        outputPath, // Caminho do arquivo de saída
+        "--use-segment-timeline", // Argumento extra, conforme o original
+        "-f", // Argumento extra, conforme o original
     }
 
-    fmt.Printf("Executing command: /opt/bento4/bin/mp4fragment %v\n", cmdArgs)
+    // Executa o comando Python para rodar o mp4-dash
+    cmd := exec.Command("python3", cmdArgs...)
 
-    cmd := exec.Command("/opt/bento4/bin/mp4fragment", cmdArgs...)
-
+    // Captura a saída do comando
     output, err := cmd.CombinedOutput()
     if err != nil {
         fmt.Printf("Command failed with error: %v\nOutput: %s\n", err, string(output))
         return err
     }
 
+    // Imprime a saída do comando
     fmt.Printf("Command succeeded. Output: %s\n", string(output))
+
     return nil
 }
 
-
 func (v *VideoService) Finish() error {
+
 	err := os.Remove(os.Getenv("localStoragePath") + "/" + v.Video.ID + ".mp4")
 	if err != nil {
 		log.Println("error removing mp4 ", v.Video.ID, ".mp4")
@@ -146,7 +155,7 @@ func (v *VideoService) Finish() error {
 
 }
 
-func (v *VideoService) InsertVideo() error {
+func (v *VideoService) InsertVideo() error  {
 	_, err := v.VideoRepository.Insert(v.Video)
 
 	if err != nil {

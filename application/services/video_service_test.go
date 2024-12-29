@@ -1,15 +1,10 @@
 package services_test
 
 import (
-	"encoder/application/repositories"
 	"encoder/application/services"
-	"encoder/domain"
-	"encoder/framework/database"
-	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/require"
 	"log"
 	"testing"
-	"time"
 	"github.com/joho/godotenv"
 )
 
@@ -18,20 +13,6 @@ func init() {
 	if err != nil {
 		log.Fatalf("Error loading .env file")
 	}
-}
-
-func prepare() (*domain.Video, repositories.VideoRepositoryDb) {
-	db := database.NewDbTest()
-	defer db.Close()
-
-	video := domain.NewVideo()
-	video.ID = uuid.NewV4().String()
-	video.FilePath = "video.mp4"
-	video.CreatedAt = time.Now()
-
-	repo := repositories.VideoRepositoryDb{Db: db}
-
-	return video, repo
 }
 
 func TestVideoServiceDownload(t *testing.T) {

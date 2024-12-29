@@ -12,7 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 
-	"encoding/json" // Para manipular JSON
 	"github.com/aws/aws-sdk-go/aws/credentials" // Para gerenciar credenciais AWS
 )
 
@@ -25,36 +24,21 @@ type VideoUpload struct {
 }
 
 func NewVideoUpload() *VideoUpload {
-	// Carregar o caminho do arquivo de credenciais do ambiente
-	credFile := os.Getenv("AWS_APPLICATION_CREDENTIALS")
-	if credFile == "" {
-		log.Fatalf("AWS_APPLICATION_CREDENTIALS not set")
+	// Verifica se as variáveis de ambiente estão configuradas
+	awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+	awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+	awsRegion := os.Getenv("AWS_REGION")
+
+	if awsAccessKey == "" || awsSecretKey == "" || awsRegion == "" {
+		log.Fatalf("AWS environment variables not set. Ensure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION are configured.")
 	}
 
-	// Ler o arquivo JSON de credenciais
-	data, err := os.ReadFile(credFile)
-	if err != nil {
-		log.Fatalf("Failed to read AWS credentials file: %v", err)
-	}
-
-	// Estrutura para armazenar credenciais
-	type AWSCredentials struct {
-		AccessKeyId     string `json:"AccessKeyId"`
-		SecretAccessKey string `json:"SecretAccessKey"`
-		Region          string `json:"Region"`
-	}
-
-	var creds AWSCredentials
-	if err := json.Unmarshal(data, &creds); err != nil {
-		log.Fatalf("Failed to unmarshal AWS credentials: %v", err)
-	}
-
-	// Criar uma sessão AWS com as credenciais carregadas
+	// Cria uma sessão AWS com as credenciais do .env
 	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(creds.Region),
+		Region: aws.String(awsRegion),
 		Credentials: credentials.NewStaticCredentials(
-			creds.AccessKeyId,
-			creds.SecretAccessKey,
+			awsAccessKey,
+			awsSecretKey,
 			"",
 		),
 	})
@@ -65,6 +49,7 @@ func NewVideoUpload() *VideoUpload {
 	// Inicializa o cliente S3
 	return &VideoUpload{s3Client: s3.New(sess)}
 }
+
 
 
 func (vu *VideoUpload) UploadObject(objectPath string) error {
@@ -85,10 +70,10 @@ func (vu *VideoUpload) UploadObject(objectPath string) error {
 
 	// Configura o input para upload no S3
 	input := &s3.PutObjectInput{
-		Bucket: aws.String(vu.OutputBucket),
-		Key:    aws.String(path[1]),
-		Body:   strings.NewReader(string(fileContent)),
-		ACL:    aws.String("public-read"), // Permissão equivalente ao ACL do GCS
+		Bucket: aws.String(vu.OutputBucket),   // Nome do bucket
+		Key:    aws.String(path[1]),          // Chave do objeto no bucket
+		Body:   strings.NewReader(string(fileContent)), // Conteúdo do arquivo
+		ServerSideEncryption: aws.String("AES256"),     // Criptografia opcional
 	}
 
 	// Faz o upload para o S3
@@ -131,6 +116,8 @@ func (vu *VideoUpload) ProcessUpload(concurrency int, doneUpload chan string) er
 		for x := 0; x < len(vu.Paths); x++ {
 			in <- x
 		}
+
+		close(in)
 	}()
 
 	countDoneWorker := 0
@@ -143,7 +130,7 @@ func (vu *VideoUpload) ProcessUpload(concurrency int, doneUpload chan string) er
 		}
 
 		if countDoneWorker == len(vu.Paths) {
-			close(in)
+			close(returnChannel)
 		}
 	}
 
