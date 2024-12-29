@@ -23,7 +23,7 @@ No Go, a concorrência é tratada principalmente com **goroutines** e **channels
 Channels
 São mecanismos de comunicação seguro entre goroutines.
 
-go
+```go
 Copy code
 c := make(chan string)
 
@@ -33,19 +33,21 @@ c <- "mensagem"
 // Recebimento
 msg := <-c
 Lock/Mutex (sync.Mutex)
+```
+
 Se você precisa de acesso exclusivo a um recurso compartilhado (por exemplo, incrementando uma variável global), pode proteger a seção de código usando sync.Mutex:
 
-go
-Copy code
+```go
 var mu sync.Mutex
 
 mu.Lock()
 sharedResource++
 mu.Unlock()
+```
+
 No projeto, usamos goroutines para processar uploads simultâneos e channels para controlar o fluxo das tarefas. Caso algum recurso compartilhado precise de proteção, usamos um Mutex para evitar condições de corrida:
 
-go
-Copy code
+```go
 func (vu *VideoUpload) ProcessUpload(concurrency int, doneUpload chan string) error {
     in := make(chan int, concurrency)
 
@@ -57,4 +59,5 @@ func (vu *VideoUpload) ProcessUpload(concurrency int, doneUpload chan string) er
     // ...
     return nil
 }
+```
 Esse padrão aumenta a performance e a escalabilidade, pois várias partes do processo podem acontecer em paralelo, respeitando limites de concorrência e evitando bloqueios desnecessários.
