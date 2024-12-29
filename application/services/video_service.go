@@ -22,14 +22,20 @@ type VideoService struct {
 }
 
 func NewVideoService() VideoService {
-	// Inicializa a sessão AWS e o cliente S3
+	log.Println("Initializing AWS session")
 	sess := session.Must(session.NewSession(&aws.Config{
-		Region: aws.String(os.Getenv("AWS_REGION")), // Certifique-se de definir AWS_REGION no .env
+		Region: aws.String(os.Getenv("AWS_REGION")),
+		Credentials: credentials.NewStaticCredentials(
+			os.Getenv("AWS_ACCESS_KEY_ID"),
+			os.Getenv("AWS_SECRET_ACCESS_KEY"),
+			"",
+		),
 	}))
 	s3Client := s3.New(sess)
 
 	return VideoService{s3Client: s3Client}
 }
+
 
 func (v *VideoService) Download(bucketName string) error {
 	// Configura o contexto
@@ -92,26 +98,28 @@ func (v *VideoService) Fragment() error {
 }
 
 func (v *VideoService) Encode() error {
-	cmdArgs := []string{}
-	cmdArgs = append(cmdArgs, os.Getenv("localStoragePath")+"/"+v.Video.ID+".frag")
-	cmdArgs = append(cmdArgs, "--use-segment-timeline")
-	cmdArgs = append(cmdArgs, "-o")
-	cmdArgs = append(cmdArgs, os.Getenv("localStoragePath")+"/"+v.Video.ID)
-	cmdArgs = append(cmdArgs, "-f")
-	cmdArgs = append(cmdArgs, "--exec-dir")
-	cmdArgs = append(cmdArgs, "/opt/bento4/bin/")
-	cmd := exec.Command("mp4dash", cmdArgs...)
+    inputPath := os.Getenv("localStoragePath") + "/" + v.Video.ID + ".mp4"
+    outputPath := os.Getenv("localStoragePath") + "/" + v.Video.ID + ".frag.mp4"
 
-	output, err := cmd.CombinedOutput()
+    cmdArgs := []string{
+        inputPath,
+        outputPath,
+    }
 
-	if err != nil {
-		return err
-	}
+    fmt.Printf("Executing command: /opt/bento4/bin/mp4fragment %v\n", cmdArgs)
 
-	printOutput(output)
+    cmd := exec.Command("/opt/bento4/bin/mp4fragment", cmdArgs...)
 
-	return nil
+    output, err := cmd.CombinedOutput()
+    if err != nil {
+        fmt.Printf("Command failed with error: %v\nOutput: %s\n", err, string(output))
+        return err
+    }
+
+    fmt.Printf("Command succeeded. Output: %s\n", string(output))
+    return nil
 }
+
 
 func (v *VideoService) Finish() error {
 	err := os.Remove(os.Getenv("localStoragePath") + "/" + v.Video.ID + ".mp4")

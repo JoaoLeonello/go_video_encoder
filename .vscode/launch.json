@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    // ...
+    {
+      "name": "Debug Go Tests (services)",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceFolder}/application/services", 
+      // ^ Substitua este caminho pelo pacote/diretório que contém seus testes
+      "env": {
+        // Se precisar de variáveis de ambiente para .env ou algo assim, coloque aqui
+      },
+      "args": [
+        // Se quiser rodar testes específicos ou com verbose, pode colocar flags aqui
+        // Por exemplo: "-test.run", "TestVideoServiceUpload"
+        // "-test.v"
+      ]
+    }
+  ]
+}
