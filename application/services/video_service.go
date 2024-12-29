@@ -99,31 +99,30 @@ func (v *VideoService) Fragment() error {
 }
 
 func (v *VideoService) Encode() error {
-    // Define os caminhos de entrada e saída
+    // Caminho do arquivo de entrada (arquivo .frag gerado antes)
     inputPath := os.Getenv("localStoragePath") + "/" + v.Video.ID + ".frag"
-    outputPath := os.Getenv("localStoragePath") + "/" + v.Video.ID + ".mp4"
+    
+    // Em vez de gerar outro .mp4, vamos criar um diretório de saída DASH
+    dashOutputPath := os.Getenv("localStoragePath") + "/" + v.Video.ID + "_dash"
 
-    // Define os argumentos para o script Python
+    // Definir o array de argumentos para o `mp4-dash.py`
     cmdArgs := []string{
-        "/opt/Bento4/Source/Python/utils/mp4-dash.py", // Caminho para o script
-        inputPath, // Caminho do arquivo .frag
-        "--output", // Flag para o caminho de saída
-        outputPath, // Caminho do arquivo de saída
-        "--use-segment-timeline", // Argumento extra, conforme o original
-        "-f", // Argumento extra, conforme o original
+        "/opt/bento4/Source/Python/utils/mp4-dash.py", // Caminho para o script
+        inputPath,                                     // Arquivo .frag
+        "--output",                                    // Flag para o caminho de saída
+        dashOutputPath,                                // Diretório de saída
+        "--use-segment-timeline",                      // Argumentos adicionais
+        "-f",                                          // Força overwrite
     }
 
-    // Executa o comando Python para rodar o mp4-dash
+    // Executa o script Python
     cmd := exec.Command("python3", cmdArgs...)
-
-    // Captura a saída do comando
     output, err := cmd.CombinedOutput()
     if err != nil {
         fmt.Printf("Command failed with error: %v\nOutput: %s\n", err, string(output))
         return err
     }
 
-    // Imprime a saída do comando
     fmt.Printf("Command succeeded. Output: %s\n", string(output))
 
     return nil
