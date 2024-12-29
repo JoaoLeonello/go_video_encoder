@@ -1,7 +1,6 @@
 package services
 
 import (
-	"context"
 	"io"
 	"log"
 	"os"
@@ -12,6 +11,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+
+	"encoding/json" // Para manipular JSON
+	"github.com/aws/aws-sdk-go/aws/credentials" // Para gerenciar credenciais AWS
 )
 
 type VideoUpload struct {
@@ -23,12 +25,47 @@ type VideoUpload struct {
 }
 
 func NewVideoUpload() *VideoUpload {
-	// Inicializa a sessão da AWS e o cliente S3
-	sess := session.Must(session.NewSession(&aws.Config{
-		Region: aws.String(os.Getenv("AWS_REGION")), // Certifique-se de definir AWS_REGION no .env
-	}))
+	// Carregar o caminho do arquivo de credenciais do ambiente
+	credFile := os.Getenv("AWS_APPLICATION_CREDENTIALS")
+	if credFile == "" {
+		log.Fatalf("AWS_APPLICATION_CREDENTIALS not set")
+	}
+
+	// Ler o arquivo JSON de credenciais
+	data, err := os.ReadFile(credFile)
+	if err != nil {
+		log.Fatalf("Failed to read AWS credentials file: %v", err)
+	}
+
+	// Estrutura para armazenar credenciais
+	type AWSCredentials struct {
+		AccessKeyId     string `json:"AccessKeyId"`
+		SecretAccessKey string `json:"SecretAccessKey"`
+		Region          string `json:"Region"`
+	}
+
+	var creds AWSCredentials
+	if err := json.Unmarshal(data, &creds); err != nil {
+		log.Fatalf("Failed to unmarshal AWS credentials: %v", err)
+	}
+
+	// Criar uma sessão AWS com as credenciais carregadas
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(creds.Region),
+		Credentials: credentials.NewStaticCredentials(
+			creds.AccessKeyId,
+			creds.SecretAccessKey,
+			"",
+		),
+	})
+	if err != nil {
+		log.Fatalf("Failed to create AWS session: %v", err)
+	}
+
+	// Inicializa o cliente S3
 	return &VideoUpload{s3Client: s3.New(sess)}
 }
+
 
 func (vu *VideoUpload) UploadObject(objectPath string) error {
 	// Divide o caminho local para criar a chave do objeto no S3
