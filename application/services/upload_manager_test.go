@@ -18,32 +18,27 @@ func init() {
 }
 
 func TestVideoServiceUpload(t *testing.T) {
-    log.Println("Starting TestVideoServiceUpload")
     video, repo := prepare()
 
-    log.Println("Initializing VideoService")
     videoService := services.NewVideoService()
     videoService.Video = video
     videoService.VideoRepository = repo
 
-    log.Println("Starting Download")
-    err := videoService.Download("video-encoder-test-output")
+    err := videoService.Download("video-encoder-test")
     require.Nil(t, err)
 
-    log.Println("Starting Fragment")
     err = videoService.Fragment()
     require.Nil(t, err)
 
-    log.Println("Starting Encode")
     err = videoService.Encode()
     require.Nil(t, err)
 
-    log.Println("Preparing VideoUpload")
+    log.Println("Preparing VideoUpload****************************")
     videoUpload := services.NewVideoUpload()
     videoUpload.OutputBucket = "video-encoder-test-output"
-    videoUpload.VideoPath = os.Getenv("localStoragePath") + "/" + video.ID
+    videoUpload.VideoPath = os.Getenv("localStoragePath") + "/" + video.ID + "_dash"
 
-    log.Println("Starting ProcessUpload")
+    log.Println("Starting ProcessUpload------")
     doneUpload := make(chan string)
     go videoUpload.ProcessUpload(50, doneUpload)
 
