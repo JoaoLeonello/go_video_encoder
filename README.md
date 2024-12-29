@@ -9,6 +9,13 @@ Este projeto tem como objetivo **converter vídeos** para um formato compatível
 4. **Compatibilidade**: Vários players de vídeo (HTML5, VLC, players nativos) suportam protocolos como DASH ou HLS para transmitir o conteúdo com maior robustez.
 
 ---
+# Como Rodar o Projeto
+
+1. **Construa os containers com Docker Compose:**
+   ```bash
+   docker compose build
+   
+---
 
 # Go Routines e Lock/Mutex
 
