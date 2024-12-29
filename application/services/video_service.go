@@ -1,7 +1,6 @@
 package services
 
 import (
-	"bytes"
 	"context"
 	"encoder/application/repositories"
 	"encoder/domain"
