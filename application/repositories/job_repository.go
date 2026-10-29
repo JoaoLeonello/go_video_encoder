@@ -41,7 +41,7 @@ func (repo JobRepositoryDb) Find(id string) (*domain.Job, error) {
 }
 
 func (repo JobRepositoryDb) Update(job *domain.Job) (*domain.Job, error) {
-	err := repo.Db.Save(&job).Error
+	err := repo.Db.Save(job).Error
 
 	if err != nil {
 		return nil, err

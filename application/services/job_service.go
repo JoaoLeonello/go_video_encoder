@@ -3,7 +3,6 @@ package services
 import (
 	"encoder/application/repositories"
 	"encoder/domain"
-	"errors"
 	"os"
 	"strconv"
 )
@@ -84,38 +83,22 @@ func (j *JobService) performUpload() error {
 	err := j.changeJobStatus("UPLOADING")
 
 	if err != nil {
-		return j.failJob(err)
+		return err
 	}
 
 	videoUpload := NewVideoUpload()
 	videoUpload.OutputBucket = os.Getenv("outputBucketName")
-	videoUpload.VideoPath = os.Getenv("localStoragePath") + "/" + j.VideoService.Video.ID
+	videoUpload.VideoPath = j.VideoService.DashPath()
 	concurrency, _ := strconv.Atoi(os.Getenv("CONCURRENCY_UPLOAD"))
-	doneUpload := make(chan string)
 
-	go videoUpload.ProcessUpload(concurrency, doneUpload)
-
-	var uploadResult string
-	uploadResult = <-doneUpload
-
-	if uploadResult != "upload completed" {
-		return j.failJob(errors.New(uploadResult))
-	}
-
-	return err
+	return videoUpload.ProcessUpload(concurrency)
 }
 
 func (j *JobService) changeJobStatus(status string) error {
-	var err error
-
 	j.Job.Status = status
-	j.Job, err = j.JobRepository.Update(j.Job)
+	_, err := j.JobRepository.Update(j.Job)
 
-	if err != nil {
-		return j.failJob(err)
-	}
-
-	return nil
+	return err
 }
 
 func (j *JobService) failJob(error error) error {

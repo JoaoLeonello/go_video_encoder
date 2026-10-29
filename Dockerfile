@@ -5,7 +5,7 @@ RUN echo "http://dl-cdn.alpinelinux.org/alpine/v3.12/main" > /etc/apk/repositori
     echo "http://dl-cdn.alpinelinux.org/alpine/v3.12/community" >> /etc/apk/repositories
 
 # Instalar dependências necessárias, incluindo Python 2.7
-RUN apk add --update --no-cache python2 bash ffmpeg make unzip gcc g++ scons && \
+RUN apk add --update --no-cache python2 python3 bash ffmpeg make unzip gcc g++ scons && \
     ln -sf /usr/bin/python2 /usr/bin/python
 
 # Instalar Bento4 e garantir que mp4dash seja incluído

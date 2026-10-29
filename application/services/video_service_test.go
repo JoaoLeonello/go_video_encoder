@@ -7,22 +7,25 @@ import (
 	"encoder/framework/database"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/require"
-	"log"
+	"os"
 	"testing"
 	"time"
+
 	"github.com/joho/godotenv"
 )
 
 func init() {
-	err := godotenv.Load("../../.env")
-	if err != nil {
-		log.Fatalf("Error loading .env file")
-	}
+	_ = godotenv.Load("../../.env")
 }
 
-func prepare() (*domain.Video, repositories.VideoRepositoryDb) {
+// prepare pula o teste quando não há credenciais AWS: estes testes dependem de S3 real e do Bento4.
+func prepare(t *testing.T) (*domain.Video, repositories.VideoRepositoryDb) {
+	if os.Getenv("AWS_ACCESS_KEY_ID") == "" {
+		t.Skip("AWS_ACCESS_KEY_ID not set, skipping integration test")
+	}
+
 	db := database.NewDbTest()
-	defer db.Close()
+	t.Cleanup(func() { db.Close() })
 
 	video := domain.NewVideo()
 	video.ID = uuid.NewV4().String()
@@ -36,7 +39,7 @@ func prepare() (*domain.Video, repositories.VideoRepositoryDb) {
 
 func TestVideoServiceDownload(t *testing.T) {
 
-	video, repo := prepare()
+	video, repo := prepare(t)
 
 	videoService := services.NewVideoService()
 	videoService.Video = video

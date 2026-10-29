@@ -1,18 +1,15 @@
 package services
 
 import (
-	"io"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strings"
+	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-
-	"github.com/aws/aws-sdk-go/aws/credentials" // Para gerenciar credenciais AWS
 )
 
 type VideoUpload struct {
@@ -24,37 +21,20 @@ type VideoUpload struct {
 }
 
 func NewVideoUpload() *VideoUpload {
-	// Verifica se as variáveis de ambiente estão configuradas
-	awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
-	awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-	awsRegion := os.Getenv("AWS_REGION")
-
-	if awsAccessKey == "" || awsSecretKey == "" || awsRegion == "" {
-		log.Fatalf("AWS environment variables not set. Ensure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION are configured.")
-	}
-
-	// Cria uma sessão AWS com as credenciais do .env
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(awsRegion),
-		Credentials: credentials.NewStaticCredentials(
-			awsAccessKey,
-			awsSecretKey,
-			"",
-		),
-	})
-	if err != nil {
-		log.Fatalf("Failed to create AWS session: %v", err)
-	}
-
-	// Inicializa o cliente S3
-	return &VideoUpload{s3Client: s3.New(sess)}
+	return &VideoUpload{s3Client: newS3Client()}
 }
 
-
+// newS3Client usa a cadeia padrão de credenciais da AWS (variáveis AWS_*, ~/.aws, IAM role).
+func newS3Client() *s3.S3 {
+	return s3.New(session.Must(session.NewSession()))
+}
 
 func (vu *VideoUpload) UploadObject(objectPath string) error {
-	// Divide o caminho local para criar a chave do objeto no S3
-	path := strings.Split(objectPath, os.Getenv("localStoragePath")+"/")
+	// A chave no S3 é o caminho relativo a localStoragePath, ex.: "<video_id>_dash/manifest.mpd"
+	key, err := filepath.Rel(os.Getenv("localStoragePath"), objectPath)
+	if err != nil {
+		return err
+	}
 
 	f, err := os.Open(objectPath)
 	if err != nil {
@@ -62,93 +42,67 @@ func (vu *VideoUpload) UploadObject(objectPath string) error {
 	}
 	defer f.Close()
 
-	// Lê o conteúdo do arquivo
-	fileContent, err := io.ReadAll(f)
-	if err != nil {
-		return err
-	}
-
-	// Configura o input para upload no S3
-	input := &s3.PutObjectInput{
-		Bucket: aws.String(vu.OutputBucket),   // Nome do bucket
-		Key:    aws.String(path[1]),          // Chave do objeto no bucket
-		Body:   strings.NewReader(string(fileContent)), // Conteúdo do arquivo
-		ServerSideEncryption: aws.String("AES256"),     // Criptografia opcional
-	}
-
-	// Faz o upload para o S3
-	_, err = vu.s3Client.PutObject(input)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	_, err = vu.s3Client.PutObject(&s3.PutObjectInput{
+		Bucket:               aws.String(vu.OutputBucket),
+		Key:                  aws.String(key),
+		Body:                 f,
+		ServerSideEncryption: aws.String("AES256"),
+	})
+	return err
 }
 
 func (vu *VideoUpload) loadPaths() error {
-	err := filepath.Walk(vu.VideoPath, func(path string, info os.FileInfo, err error) error {
+	return filepath.Walk(vu.VideoPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 		if !info.IsDir() {
 			vu.Paths = append(vu.Paths, path)
 		}
 		return nil
 	})
-
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
-func (vu *VideoUpload) ProcessUpload(concurrency int, doneUpload chan string) error {
-	in := make(chan int, runtime.NumCPU()) // Índice dos arquivos no slice Paths
-	returnChannel := make(chan string)
-
-	err := vu.loadPaths()
-	if err != nil {
+// ProcessUpload envia todos os arquivos de VideoPath para o bucket usando até
+// `concurrency` goroutines. Retorna erro se algum upload falhar.
+func (vu *VideoUpload) ProcessUpload(concurrency int) error {
+	if err := vu.loadPaths(); err != nil {
 		return err
 	}
-
-	for process := 0; process < concurrency; process++ {
-		go vu.uploadWorker(in, returnChannel)
+	if len(vu.Paths) == 0 {
+		return fmt.Errorf("no files to upload in %s", vu.VideoPath)
+	}
+	if concurrency < 1 {
+		concurrency = 1
 	}
 
-	go func() {
-		for x := 0; x < len(vu.Paths); x++ {
-			in <- x
-		}
+	in := make(chan string)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 
-		close(in)
-	}()
-
-	countDoneWorker := 0
-	for r := range returnChannel {
-		countDoneWorker++
-
-		if r != "" {
-			doneUpload <- r
-			break
-		}
-
-		if countDoneWorker == len(vu.Paths) {
-			close(returnChannel)
-		}
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for path := range in {
+				if err := vu.UploadObject(path); err != nil {
+					log.Printf("Error during the upload: %v. Error: %v", path, err)
+					mu.Lock()
+					vu.Errors = append(vu.Errors, path)
+					mu.Unlock()
+				}
+			}
+		}()
 	}
 
+	for _, path := range vu.Paths {
+		in <- path
+	}
+	close(in)
+	wg.Wait()
+
+	if len(vu.Errors) > 0 {
+		return fmt.Errorf("failed to upload %d of %d files", len(vu.Errors), len(vu.Paths))
+	}
 	return nil
-}
-
-func (vu *VideoUpload) uploadWorker(in chan int, returnChan chan string) {
-	for x := range in {
-		err := vu.UploadObject(vu.Paths[x])
-
-		if err != nil {
-			vu.Errors = append(vu.Errors, vu.Paths[x])
-			log.Printf("Error during the upload: %v. Error: %v", vu.Paths[x], err)
-			returnChan <- err.Error()
-		}
-
-		returnChan <- ""
-	}
-
-	returnChan <- "upload completed"
 }

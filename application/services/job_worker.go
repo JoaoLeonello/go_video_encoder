@@ -78,7 +78,7 @@ func JobWorker(messageChannel chan amqp.Delivery, returnChan chan JobWorkerResul
 		err = jobService.Start()
 
 		if err != nil {
-			returnChan <- returnJobResult(domain.Job{}, message, err)
+			returnChan <- returnJobResult(job, message, err)
 			continue
 		}
 
